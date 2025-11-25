@@ -140,7 +140,7 @@ SFT_ARGS=(
    --calculate-per-token-loss
    --disable-compute-advantages-and-returns
    --debug-train-only
-   --log-file-path logs/train_$(date +%Y%m%d_%H%M%S)
+  #  --log-file-path logs/train_$(date +%Y%m%d_%H%M%S)
   #  --save-debug-train-data debug/rollout_id_{rollout_id}/rank_{rank}.pt
 )
 

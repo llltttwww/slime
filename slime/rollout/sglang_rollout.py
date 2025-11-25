@@ -23,6 +23,7 @@ from slime.utils.http_utils import get, post
 from slime.utils.mask_utils import get_response_lengths
 from slime.utils.misc import SingletonMeta, load_function
 from slime.utils.types import Sample
+from httpx import RemoteProtocolError, HTTPError
 
 from .rm_hub import async_rm, batched_async_rm
 
@@ -105,22 +106,24 @@ async def generate(args: Namespace, sample: Sample, sampling_params: dict[str, A
     image_data = []
     if isinstance(sample.prompt, str):
         text_prompt = sample.prompt
-    else:  # Multimodal prompt (list of dicts)
-        text_prompt = ""
-        # sglang uses a placeholder to insert image features
-        image_token = state.tokenizer.special_tokens_map.get("image_token", "<image>")
-        for part in sample.prompt:
-            if part["type"] == "text":
-                text_prompt += part["text"]
-            elif part["type"] == "image":
-                text_prompt += image_token
-                try:
-                    img_b64 = await asyncio.to_thread(_load_and_encode_image, part["path"])
-                    image_data.append(img_b64)
-                except Exception as e:
-                    logger.info(f"Error processing image {part['path']}: {e}")
-                    sample.status = Sample.Status.ABORTED
-                    return sample
+    # else:  # Multimodal prompt (list of dicts)
+    #     text_prompt = ""
+    #     # sglang uses a placeholder to insert image features
+    #     image_token = state.tokenizer.special_tokens_map.get("image_token", "<image>")
+    #     for part in sample.prompt:
+    #         if part["type"] == "text":
+    #             text_prompt += part["text"]
+    #         elif part["type"] == "image":
+    #             text_prompt += image_token
+    #             try:
+    #                 img_b64 = await asyncio.to_thread(_load_and_encode_image, part["path"])
+    #                 image_data.append(img_b64)
+    #             except Exception as e:
+    #                 logger.info(f"Error processing image {part['path']}: {e}")
+    #                 sample.status = Sample.Status.ABORTED
+    #                 return sample
+    else: # common and normal list-type prompt
+        text_prompt=state.tokenizer.apply_chat_template(sample.prompt,tokenize=False,add_generation_prompt=True,)
 
     if len(sample.response) > 0:
         # Adjust max_new_tokens for subsequent generation turns
@@ -162,7 +165,7 @@ async def generate(args: Namespace, sample: Sample, sampling_params: dict[str, A
     if args.use_slime_router and "RadixTreeMiddleware" in args.slime_router_middleware_paths:
         assert not args.partial_rollout, "Currently parital rollout is not suppurted when using slime router"
         retrieve_url = f"http://{args.sglang_router_ip}:{args.sglang_router_port}/retrieve_from_text"
-        retrieve_payload = {"text": sample.prompt + output["text"], "return_logp": True}
+        retrieve_payload = {"text": sample.prompt if isinstance(sample.prompt,str) else text_prompt + output["text"], "return_logp": True}
         retrieve_output = await post(retrieve_url, retrieve_payload)
         sample.tokens = retrieve_output["tokens"]
         sample.response += output["text"]
@@ -293,27 +296,45 @@ async def generate_and_rm_group(
 
 
 async def abort(args: Namespace, rollout_id: int) -> list[list[Sample]]:
-    aborted_samples = []
+    aborted_samples: list[list[Sample]] = []
 
     state = GenerateState(args)
     assert not state.aborted
     state.aborted = True
 
-    if parse(sglang_router.__version__) <= parse("0.2.1") or args.use_slime_router:
-        response = await get(f"http://{args.sglang_router_ip}:{args.sglang_router_port}/list_workers")
-        urls = response["urls"]
-    else:
-        response = await get(f"http://{args.sglang_router_ip}:{args.sglang_router_port}/workers")
-        urls = [worker["url"] for worker in response["workers"]]
+    urls: list[str] = []
+    router_addr = f"http://{args.sglang_router_ip}:{args.sglang_router_port}"
 
+    try:
+        # 不同版本的 router 接口
+        if parse(sglang_router.__version__) <= parse("0.2.1") or args.use_slime_router:
+            response = await get(f"{router_addr}/list_workers")
+            urls = response["urls"]
+        else:
+            response = await get(f"{router_addr}/workers")
+            urls = [worker["url"] for worker in response["workers"]]
+    except (RemoteProtocolError, HTTPError, OSError, KeyError) as e:
+        logger.warning(
+            f"[abort] Failed to query workers from router {router_addr}: {e}. "
+            "Skip abort for this rollout."
+        )
+        # 直接返回当前已收集的 aborted_samples（通常是空），不要让训练挂掉
+        return aborted_samples
+
+    # 真正发 abort_request，这里最好也别因为单个 worker 报错把整个挂了
     for url in urls:
         logger.info(f"Abort request for {url}")
-        await post(f"{url}/abort_request", {"abort_all": True})
+        try:
+            await post(f"{url}/abort_request", {"abort_all": True})
+        except (RemoteProtocolError, HTTPError, OSError) as e:
+            logger.warning(f"[abort] Failed to abort worker {url}: {e}")
 
     # make sure all the pending tasks are finished
     count = 0
     while state.pendings:
-        done, state.pendings = await asyncio.wait(state.pendings, return_when=asyncio.FIRST_COMPLETED)
+        done, state.pendings = await asyncio.wait(
+            state.pendings, return_when=asyncio.FIRST_COMPLETED
+        )
 
         if not args.partial_rollout:
             continue
@@ -331,6 +352,7 @@ async def abort(args: Namespace, rollout_id: int) -> list[list[Sample]]:
         logger.info(f"Collected {count} partial samples into the data buffer")
 
     return aborted_samples
+
 
 
 async def generate_rollout_async(

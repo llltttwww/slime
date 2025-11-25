@@ -19,8 +19,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 source "${SCRIPT_DIR}/models/qwen3-next-2B-A0.5B.sh"
 
 CKPT_ARGS=(
-   --hf-checkpoint /mnt/shared-storage-user/p1-shared/luotianwei/hf_cache/hub/models--yuchenFan--Qwen3-Next-2B-A0.5B-1121/snapshots/eac526354249772cf0c03c5879d908cef1f20706
-   --ref-load /mnt/shared-storage-user/p1-shared/luotianwei/checkpoints/Qwen3-Next-2B-A0.5B-Base-1121
+   --hf-checkpoint /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen3-next-2B-A0.5B-sft-iter_0000173
+   --ref-load /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen-3-next-2B-A0.5B-pretrain-kimi
+   --load /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen-3-next-2B-A0.5B-pretrain-kimi-rl
+   --save /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen-3-next-2B-A0.5B-pretrain-kimi-rl
+   --save-interval 100
 )
 
 ROLLOUT_ARGS=(

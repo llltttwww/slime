@@ -17,6 +17,7 @@ class Sample:
     # response
     response: str = ""
     response_length: int = 0
+    answer: Optional[str] = None
     label: Optional[str] = None
     reward: Optional[Union[float, dict[str, Any]]] = None
     loss_mask: Optional[list[int]] = None

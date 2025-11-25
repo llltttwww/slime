@@ -458,6 +458,7 @@ def get_slime_extra_args_provider(add_custom_arguments=None):
             # Temporarily be JSON-serialized str, will be a real dict after using Omegaconf
             parser.add_argument("--apply-chat-template-kwargs", type=json.loads, default="{}")
             parser.add_argument("--input-key", type=str, default="input", help="JSON dataset key")
+            parser.add_argument("--answer-key",type=str,default="answer",help="JSON dataset key")
             parser.add_argument("--label-key", type=str, default=None, help="JSON dataset key")
             parser.add_argument(
                 "--multimodal-keys",
@@ -467,6 +468,7 @@ def get_slime_extra_args_provider(add_custom_arguments=None):
                     'JSON string for multimodal data mapping media types to data keys. Example: \'{"image": "image_file"}\''
                 ),
             )
+            parser.add_argument("--log-file-path", type=str, default=None)
             parser.add_argument("--metadata-key", type=str, default="metadata", help="JSON dataset key")
             parser.add_argument(
                 "--tool-key",

@@ -55,6 +55,7 @@ class Dataset:
         *,
         prompt_key="text",
         multimodal_keys=None,
+        answer_key=None,
         label_key=None,
         tool_key=None,
         metadata_key="metadata",
@@ -62,6 +63,7 @@ class Dataset:
         apply_chat_template=False,
         apply_chat_template_kwargs=None,
     ):
+        # breakpoint()
         self.origin_samples = []
         for data in read_file(path):
             if multimodal_keys:
@@ -85,15 +87,12 @@ class Dataset:
                     assert isinstance(tools, list), f"tools must be a list, got {type(tools)} instead"
                 else:
                     tools = None
-                template_input = [{"role": "user", "content": prompt_content}] if multimodal_keys else prompt_content
-                prompt = tokenizer.apply_chat_template(
-                    template_input,
-                    tools,
-                    tokenize=False,
-                    add_generation_prompt=True,
-                    **apply_chat_template_kwargs,
-                )
-
+                if isinstance(prompt_content,str) or multimodal_keys:
+                    template_input = [ {"role": "system", "content": "You are a helpful assistant."},
+                                      {"role": "user", "content": prompt_content}]
+                else:
+                    template_input=prompt_content
+                prompt = template_input
             else:
                 prompt = prompt_content
 
@@ -103,11 +102,20 @@ class Dataset:
                 if not multimodal_keys:
                     if len(raw_prompt_ids) > max_length:
                         continue
+            
+            answer=None
+            if answer_key is not None:
+                raw_answer=data[answer_key]
+                if isinstance(raw_answer,str):
+                    answer=[{"role": "assistant", "content": raw_answer}]
+                else:
+                    answer=raw_answer
 
             self.origin_samples.append(
                 Sample(
                     prompt=prompt,
-                    label=data[label_key] if label_key is not None else None,
+                    answer=answer,
+                    label=data[label_key] if label_key else None,
                     metadata=data.get(metadata_key) or {},
                 )
             )
