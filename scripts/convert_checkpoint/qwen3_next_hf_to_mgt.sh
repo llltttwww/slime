@@ -18,7 +18,7 @@ source /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/sc
 PYTHONPATH=${SLIME_ROOT}:${MEGATRON_ROOT} python tools/convert_hf_to_torch_dist.py \
     ${MODEL_ARGS[@]} \
     --hf-checkpoint /mnt/shared-storage-user/p1-shared/luotianwei/hf_cache/hub/models--yuchenFan--Qwen3-Next-2B-A0.5B-1121/snapshots/eac526354249772cf0c03c5879d908cef1f20706 \
-    --save  /mnt/shared-storage-user/p1-shared/luotianwei/checkpoints/Qwen3-Next-2B-A0.5B-Base-1121 \
+    --save  /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/temp \
 
 
 # source /apdcephfs/mnt/cephfs/users/yuchenfan/slime/scripts/models/qwen3-next-2B-A0.5B.sh

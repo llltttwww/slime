@@ -39,6 +39,8 @@ from .update_weight.common import named_params_and_buffers
 from .update_weight.update_weight_from_distributed import UpdateWeightFromDistributed
 from .update_weight.update_weight_from_tensor import UpdateWeightFromTensor
 
+import slime.kimi
+
 logging.getLogger("megatron").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)

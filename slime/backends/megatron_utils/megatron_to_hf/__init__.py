@@ -8,7 +8,7 @@ from .processors.quantizer import quantize_params
 from .qwen2 import convert_qwen2_to_hf
 from .qwen3_next import convert_qwen3_next_to_hf
 from .qwen3moe import convert_qwen3moe_to_hf
-
+from .qwen3_kimi import convert_qwen3_kimi_to_hf
 
 # TODO unify w/ `convert_to_hf`
 def postprocess_hf_param(args, megatron_param_name, hf_param_name, param):
@@ -43,6 +43,8 @@ def _convert_to_hf_core(args, model_name, name, param):
         converted_named_tensors = convert_qwen3moe_to_hf(args, name, param)
     elif "qwen3next" in model_name:
         converted_named_tensors = convert_qwen3_next_to_hf(args, name, param)
+    elif "qwen3kimi" in model_name:
+        converted_named_tensors = convert_qwen3_kimi_to_hf(args,name,param)
     elif "qwen2" in model_name or "qwen3" in model_name:
         converted_named_tensors = convert_qwen2_to_hf(args, name, param)
     elif "deepseekv3" in model_name:
