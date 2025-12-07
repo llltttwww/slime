@@ -1,16 +1,21 @@
 import dataclasses
 import gc
-import logging
 import math
 import os
 from argparse import Namespace
 from collections.abc import Callable, Sequence
 from functools import partial
 
+from datetime import datetime
+import os
+# Global variable for default log file path
+_default_log_file = None
+
 import torch
+import wandb
 from megatron.core import mpu
 from megatron.core.distributed import DistributedDataParallel as DDP
-from megatron.core.distributed import finalize_model_grads
+from megatron.core.distributed import DistributedDataParallelConfig, finalize_model_grads
 from megatron.core.enums import ModelType
 from megatron.core.models.gpt import GPTModel
 from megatron.core.optimizer import OptimizerConfig, get_megatron_optimizer
@@ -21,7 +26,6 @@ from megatron.core.utils import get_model_config
 from megatron.training.global_vars import get_args
 from megatron.training.training import get_model
 
-from slime.utils import tracking_utils
 from slime.utils.memory_utils import clear_memory
 
 from .checkpoint import load_checkpoint, save_checkpoint
@@ -30,8 +34,41 @@ from .data import DataIterator, get_batch
 from .loss import loss_function
 from .model_provider import get_model_provider_func
 
-logger = logging.getLogger(__name__)
 
+def log_with_file(message, log_file=None, args=None):
+    """Log message to both console and file with timestamp."""
+    global _default_log_file
+    
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_message = f"[{timestamp}] {message}"
+    print(log_message)
+    
+    # Get log file path from args if not specified
+    if log_file is None:
+        if args is not None and hasattr(args, 'log_file_path') and args.log_file_path is not None:
+            log_file = args.log_file_path
+        else:
+            # Create default path with timestamp (once per program run)
+            if _default_log_file is None:
+                timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+                _default_log_file = f"training_metrics_{timestamp_str}.log"
+            log_file = _default_log_file
+    
+    # Ensure log directory exists
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(log_file)) if os.path.dirname(log_file) else ".", exist_ok=True)
+    except OSError:
+        # If directory creation fails (e.g., disk quota exceeded), skip file logging
+        return
+    
+    # Append to log file
+    try:
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(log_message + "\n")
+    except OSError as e:
+        # If file write fails (e.g., disk quota exceeded), print warning but don't crash
+        print(f"Warning: Failed to write to log file {log_file}: {e}")
+        print("Continuing training without file logging...")
 
 def get_optimizer_param_scheduler(args: Namespace, optimizer: MegatronOptimizer) -> OptimizerParamScheduler:
     """Create and configure the optimizer learning-rate/weight-decay scheduler.
@@ -108,7 +145,43 @@ def setup_model_and_optimizer(
     assert not args.moe_use_upcycling
     assert args.load is not None or args.pretrained_checkpoint is not None
 
-    model = get_model(get_model_provider_func(args, role), ModelType.encoder_or_decoder)
+    model = get_model(get_model_provider_func(args, role), ModelType.encoder_or_decoder, wrap_with_ddp=False)
+    config = get_model_config(model[0])
+
+    kwargs = {}
+    for f in dataclasses.fields(DistributedDataParallelConfig):
+        if hasattr(args, f.name):
+            kwargs[f.name] = getattr(args, f.name)
+    kwargs["grad_reduce_in_fp32"] = args.accumulate_allreduce_grads_in_fp32
+    kwargs["check_for_nan_in_grad"] = args.check_for_nan_in_loss_and_grad
+    kwargs["check_for_large_grads"] = args.check_for_large_grads
+    kwargs["bucket_size"] = args.ddp_bucket_size
+    kwargs["pad_buckets_for_high_nccl_busbw"] = args.ddp_pad_buckets_for_high_nccl_busbw
+    kwargs["average_in_collective"] = args.ddp_average_in_collective
+    ddp_config = DistributedDataParallelConfig(**kwargs)
+
+    # In the custom FSDP and DDP use path, we need to initialize the bucket size.
+    # If bucket_size is not provided as an input, use sane default.
+    # If using very large dp_sizes, make buckets larger to ensure that chunks used in NCCL
+    # ring-reduce implementations are large enough to remain bandwidth-bound rather than
+    # latency-bound.
+    if ddp_config.bucket_size is None:
+        ddp_config.bucket_size = max(40000000, 1000000 * mpu.get_data_parallel_world_size(with_context_parallel=True))
+    # Set bucket_size to infinity if overlap_grad_reduce is False.
+    if not ddp_config.overlap_grad_reduce:
+        ddp_config.bucket_size = None
+
+    model = [
+        DDP(
+            config=config,
+            ddp_config=ddp_config,
+            module=model_chunk,
+            # Turn off bucketing for model_chunk 2 onwards, since communication for these
+            # model chunks is overlapped with compute anyway.
+            disable_bucketing=(model_chunk_idx > 0) or args.overlap_param_gather_with_optimizer_step,
+        )
+        for (model_chunk_idx, model_chunk) in enumerate(model)
+    ]
 
     # Optimizer
     kwargs = {}
@@ -127,10 +200,14 @@ def setup_model_and_optimizer(
         use_gloo_process_groups=args.enable_gloo_process_groups,
     )
     opt_param_scheduler = get_optimizer_param_scheduler(args, optimizer)
-    for optimizer in optimizer.chained_optimizers:
-        if not getattr(optimizer, "init_state_fn", None):
+    # for optimizer in optimizer.chained_optimizers:
+    #     if not getattr(optimizer, "init_state_fn", None):
+    #         continue
+    #     optimizer.init_state_fn(optimizer.optimizer, optimizer.config)
+    for sub_optimizer in optimizer.chained_optimizers:
+        if not getattr(sub_optimizer, "init_state_fn", None):
             continue
-        optimizer.init_state_fn(optimizer.optimizer, optimizer.config)
+        sub_optimizer.init_state_fn(sub_optimizer.optimizer, sub_optimizer.config)
 
     return model, optimizer, opt_param_scheduler
 
@@ -214,9 +291,7 @@ def forward_only(
         assert not return_schedule_plan, "forward_only step should never return schedule plan"
 
         # Get the batch.
-        batch = get_batch(
-            data_iterator, ["tokens", "total_lengths", "response_lengths"], args.data_pad_size_multiplier
-        )
+        batch = get_batch(data_iterator, ["tokens", "total_lengths", "response_lengths"])
         unconcat_tokens = batch["unconcat_tokens"]
         tokens = batch["tokens"]
         packed_seq_params = batch["packed_seq_params"]
@@ -367,7 +442,6 @@ def train_one_step(
                 "returns",
                 "rollout_log_probs",
             ],
-            args.data_pad_size_multiplier,
         )
 
         if os.environ.get("ENABLE_ROUTING_REPLAY", "0") == "1":
@@ -402,7 +476,7 @@ def train_one_step(
             return loss_mask_tensor.unsqueeze(0)
 
         loss_mask = None
-        mtp_kwargs = None
+        mtp_kwargs = {}
 
         if return_schedule_plan:
             assert not args.enable_mtp_training, "MTP training should not be enabled when using combined 1f1b"
@@ -433,9 +507,8 @@ def train_one_step(
                 labels=None,
                 packed_seq_params=batch["packed_seq_params"],
                 loss_mask=loss_mask,
-                **(dict(mtp_kwargs=mtp_kwargs) if mtp_kwargs is not None else {}),
+                mtp_kwargs=mtp_kwargs,
             )
-
         if os.environ.get("ENABLE_ROUTING_REPLAY", "0") == "1":
             os.environ["ROUTING_REPLAY_STAGE"] = old_stage
 
@@ -638,8 +711,17 @@ def train(
             for param_group_id, param_group in enumerate(optimizer.param_groups):
                 log_dict[f"train/{role_tag}lr-pg_{param_group_id}"] = opt_param_scheduler.get_lr(param_group)
 
-            log_dict["train/step"] = accumulated_step_id
-            tracking_utils.log(args, log_dict, step_key="train/step")
+            if args.use_wandb:
+                log_dict["train/step"] = accumulated_step_id
+                wandb.log(log_dict)
+
+            log_with_file(f"step {accumulated_step_id}: {log_dict}", args=args)
+            
+            if args.use_tensorboard:
+                from slime.utils.tensorboard_utils import _TensorboardAdapter
+
+                tb = _TensorboardAdapter(args)
+                tb.log(data=log_dict, step=accumulated_step_id)
 
             if args.ci_test and not args.ci_disable_kl_checker:
                 if step_id == 0 and "train/ppo_kl" in log_dict and "train/pg_clipfrac" in log_dict:
@@ -647,7 +729,7 @@ def train(
                 if accumulated_step_id == 0 and "train/kl_loss" in log_dict:
                     assert log_dict["train/kl_loss"] == 0.0, f"{log_dict=}"
 
-            logger.info(f"{role_tag}step {accumulated_step_id}: {log_dict}")
+            print(f"{role_tag}step {accumulated_step_id}: {log_dict}")
     # Close out pre-hooks if using distributed optimizer and overlapped param gather.
     if pre_hook_enabled:
         disable_forward_pre_hook(model)

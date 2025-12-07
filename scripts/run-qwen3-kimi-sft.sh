@@ -116,11 +116,11 @@ fi
 echo "HAS_NVLINK: $HAS_NVLINK (detected $NVLINK_COUNT NVLink references)"
 
 CKPT_ARGS=(
-   --hf-checkpoint /mnt/shared-storage-user/p1-shared/luotianwei/hf_cache/hub/models--yuchenFan--Qwen3-Next-Kimi-2B-A0.5B/snapshots/04ce5e7db97ab611adb548ff0da4a243cb0d973c
+   --hf-checkpoint /mnt/shared-storage-user/p1-shared/luotianwei/hf_cache/hub/models--yuchenFan--Qwen3-Next-Kimi-1204/snapshots/fccadc7499f8a9bcef45f30f409143e01640bef7
    #--hf-checkpoint /apdcephfs/mnt/cephfs/users/yuchenfan/qwen-3-next-FP8
-   --ref-load /mnt/shared-storage-user/p1-shared/luotianwei/checkpoints/Qwen3-Next-Kimi-2B-A0.5B
-   --load /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen-3-next-kimi-2B-A0.5B
-   --save /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen-3-next-kimi-2B-A0.5B
+   --ref-load /mnt/shared-storage-user/p1-shared/luotianwei/checkpoints/Qwen3-Next-Kimi-1204
+   --load /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen-3-next-kimi-1204
+   --save /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen-3-next-kimi-1204
    --save-interval 1000
 )
 

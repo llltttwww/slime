@@ -19,10 +19,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 source "${SCRIPT_DIR}/models/qwen3-kimi-2B-A0.5B.sh"
 
 CKPT_ARGS=(
-   --hf-checkpoint /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen-3-next-kimi-2B-A0.5B/qwen3-next-kimi-2B-A0.5B-sft-iter_0000173
-   --ref-load /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen-3-next-kimi-2B-A0.5B
-   --load /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen-3-kimi-2B-A0.5B-pretrain-kimi-rl
-   --save /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen-3-kimi-2B-A0.5B-pretrain-kimi-rl
+   --hf-checkpoint /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/hf_checkpoints/qwen3-kimi-1204-iter0000173
+   --ref-load /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen-3-next-kimi-1204
+   --load /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen-3-next-kimi-1204/rl
+   --save /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/checkpoints/qwen-3-next-kimi-1204/rl
    --save-interval 100
 )
 

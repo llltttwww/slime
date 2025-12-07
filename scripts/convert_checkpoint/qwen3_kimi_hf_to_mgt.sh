@@ -5,5 +5,5 @@ source /mnt/shared-storage-user/p1-shared/luotianwei/pretrain/posttrain/slime/sc
 
 PYTHONPATH=${SLIME_ROOT}:${MEGATRON_ROOT} python tools/convert_hf_to_torch_dist.py \
     ${MODEL_ARGS[@]} \
-    --hf-checkpoint /mnt/shared-storage-user/p1-shared/luotianwei/hf_cache/hub/models--yuchenFan--Qwen3-Next-Kimi-2B-A0.5B/snapshots/04ce5e7db97ab611adb548ff0da4a243cb0d973c \
-    --save /mnt/shared-storage-user/p1-shared/luotianwei/checkpoints/Qwen3-Next-Kimi-2B-A0.5B
+    --hf-checkpoint /mnt/shared-storage-user/p1-shared/luotianwei/hf_cache/hub/models--yuchenFan--Qwen3-Next-Kimi-1204/snapshots/fccadc7499f8a9bcef45f30f409143e01640bef7 \
+    --save /mnt/shared-storage-user/p1-shared/luotianwei/checkpoints/Qwen3-Next-Kimi-1204

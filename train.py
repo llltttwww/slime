@@ -13,14 +13,14 @@ from slime.utils.tracking_utils import init_tracking
 
 # === 修复开始：注册自定义 Config 和 Tokenizer ===
 import sys
-from transformers import AutoConfig, AutoTokenizer, Qwen2Config
+from transformers import AutoConfig, AutoTokenizer, Qwen2Config, Qwen3NextConfig
 
 # 尝试导入 Qwen2 的 Tokenizer，如果版本太旧可能需要 fallback
 
 from transformers import Qwen2Tokenizer, Qwen2TokenizerFast
 
 
-class Qwen3KimiConfig(Qwen2Config):
+class Qwen3KimiConfig(Qwen3NextConfig):
     model_type = "qwen3_kimi"
 
     def __init__(

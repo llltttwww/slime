@@ -17,6 +17,8 @@ try:
 except ImportError:
     pass
 
+from transformers import Qwen3NextConfig
+
 from .hf_attention import HuggingfaceAttention
 
 
